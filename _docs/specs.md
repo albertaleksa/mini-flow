@@ -767,7 +767,34 @@ The important product requirement is:
 
 ---
 
-# 29. Persistence
+# 29. Chosen Technology Stack
+
+The MVP will use the following stack. Versions are the latest stable releases checked on **2026-09-13**; they are a planning baseline, not a substitute for checking compatibility and locking dependencies when implementation begins. Pre-release versions are excluded.
+
+| Layer | Technology | Planning version | Purpose |
+| --- | --- | --- | --- |
+| Frontend | React and React DOM | 19.3.0 | Board interface |
+| Frontend | TypeScript | 7.0.2 | Typed frontend code |
+| Frontend build | Vite | 8.2.2 | Development server and production build |
+| Frontend build | `@vitejs/plugin-react` | 6.1.1 | React support in Vite |
+| Drag and drop | `@dnd-kit/react` and `@dnd-kit/helpers` | 0.5.0 | Move and reorder cards and columns |
+| Frontend tooling | Node.js | 24.21.0 LTS | Run the frontend build tools |
+| Backend runtime | Python | 3.14.7 | Run the API server |
+| API and real time | FastAPI | 0.141.1 | HTTP endpoints and board WebSockets |
+| API server | Uvicorn | 0.52.4 | Serve the FastAPI application |
+| Data access | SQLAlchemy | 2.0.52 | Database models and queries |
+| Schema migrations | Alembic | 1.19.2 | Version database schema changes |
+| Database | SQLite | 3.53.4 upstream | Persistent board data |
+
+Normal reads and writes will use the FastAPI HTTP API. After a write commits, the backend will notify other viewers of that board through a WebSocket; clients will reload board state after reconnecting so missed messages do not leave them stale. The initial deployment will use one backend process, because an in-memory connection manager cannot broadcast across processes.
+
+SQLite will use a persistent local database file. Its write-ahead logging mode supports concurrent readers but still allows only one writer at a time. The SQLite library version bundled with the deployed Python runtime must be checked separately from the upstream version above.
+
+SQLAlchemy keeps application queries largely independent of the database, but it does not make database behavior or migrations identical. A later move to PostgreSQL would require testing queries, constraints, and Alembic migrations against PostgreSQL.
+
+---
+
+# 30. Persistence
 
 Board data must be stored persistently.
 
@@ -784,7 +811,7 @@ The application therefore requires backend/database persistence rather than brow
 
 ---
 
-# 30. Desktop Scope
+# 31. Desktop Scope
 
 The MVP is designed for desktop browsers.
 
@@ -800,7 +827,7 @@ Basic responsive behavior is acceptable, but mobile usability is not an MVP requ
 
 ---
 
-# 31. MVP Success Criteria
+# 32. MVP Success Criteria
 
 The MVP can be considered successful when the following scenario works reliably:
 
@@ -823,7 +850,7 @@ If these workflows work cleanly, MiniFlow has accomplished the core MVP goal.
 
 ---
 
-# 32. Possible Post-MVP Features
+# 33. Possible Post-MVP Features
 
 Potential future improvements include:
 
@@ -850,7 +877,7 @@ These features should only be considered after the core real-time Kanban experie
 
 ---
 
-# 33. Final MVP Definition
+# 34. Final MVP Definition
 
 **MiniFlow MVP** is a desktop-first, real-time, multi-user Kanban application where people join shared boards using a display name and shareable link.
 
