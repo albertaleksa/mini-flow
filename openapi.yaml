@@ -1,0 +1,488 @@
+openapi: 3.1.0
+info:
+  title: MiniFlow board API
+  version: 0.1.0
+  description: |
+    Proposed FastAPI HTTP contract for the current BoardService in
+    frontent/src/services/boardService.ts. No HTTP client or backend exists yet,
+    so the paths and cookie transport below are design choices, not existing routes.
+    JSON property names match frontent/src/types.ts. Search and filters run in the
+    frontend over a full Board response; they need no separate endpoint.
+
+    There are no accounts, passwords, or roles. Public board reads use the
+    shareable link. Joining records a display name and issues an opaque,
+    HttpOnly, SameSite=Lax browser cookie named miniflow_viewer. The cookie
+    identifies the browser's board memberships and is required for writes.
+    It is a membership credential, not account authentication. All members
+    have equal permissions. A browser may belong to multiple boards; a
+    subsequent join on the same board updates that member's display name.
+    The server must persist boards and memberships across restarts.
+
+    HTTP writes are atomic and use last-write-wins. After a committed board
+    change, notify subscribed clients; clients fetch the board again, including
+    after a WebSocket reconnect. Positions are zero-based and contiguous.
+servers:
+  - url: /api
+tags:
+  - name: Boards
+  - name: Columns
+  - name: Tasks
+paths:
+  /boards:
+    get:
+      tags: [Boards]
+      operationId: listBoards
+      summary: List boards known to this browser
+      description: |
+        Uses the optional viewer cookie to list boards joined or created by
+        this browser. Without it, returns an empty array. Full Board objects
+        preserve the BoardService return type.
+      responses:
+        '200':
+          description: Boards available to this browser.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Board' }
+    post:
+      tags: [Boards]
+      operationId: createBoard
+      summary: Create a board from a built-in template
+      description: |
+        The new board starts with its template columns, no tasks, and no
+        members. It is associated with this browser for listBoards; the
+        creator still calls joinBoard to become a member before editing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBoard' }
+      responses:
+        '201':
+          description: Created board.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: Opaque miniflow_viewer cookie associating this browser with the board.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Board' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /boards/by-share/{shareId}:
+    parameters:
+      - $ref: '#/components/parameters/ShareId'
+    get:
+      tags: [Boards]
+      operationId: getBoardByShareId
+      summary: Read a board using its shareable ID
+      description: Public; the frontend maps 404 to null.
+      responses:
+        '200':
+          description: Full board state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Board' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /boards/{boardId}/viewer:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+    get:
+      tags: [Boards]
+      operationId: getViewer
+      summary: Find this browser's membership on a board
+      description: No cookie or no membership returns JSON null.
+      responses:
+        '200':
+          description: Current board member or null.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Member'
+                  - type: 'null'
+        '404': { $ref: '#/components/responses/NotFound' }
+  /boards/{boardId}/members:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+    post:
+      tags: [Boards]
+      operationId: joinBoard
+      summary: Join a board or update this browser's display name
+      description: |
+        Public; boardId is obtained from the share-link read. Sets or
+        refreshes miniflow_viewer. A returning member keeps the same ID and
+        joinedAt. Joining emits a board-changed notification.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JoinBoard' }
+      responses:
+        '200':
+          description: New or updated member; response sets the viewer cookie.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: Opaque miniflow_viewer cookie; HttpOnly and SameSite=Lax.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /boards/{boardId}/columns:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+    post:
+      tags: [Columns]
+      operationId: addColumn
+      summary: Append a column
+      security: [{ viewerCookie: [] }]
+      description: |
+        Position is the previous column count. A column named Done (case
+        insensitive) becomes isDone only if the board has no Done column.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ColumnName' }
+      responses:
+        '201':
+          description: Created column.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BoardColumn' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /boards/{boardId}/columns/{columnId}:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/ColumnId'
+    patch:
+      tags: [Columns]
+      operationId: renameColumn
+      summary: Rename a column
+      security: [{ viewerCookie: [] }]
+      description: |
+        If renamed Done and no Done column exists, mark it isDone and set
+        completedAt on its tasks that lack it. Renaming an existing Done
+        column does not clear its designated isDone flag.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ColumnName' }
+      responses:
+        '204': { description: Column renamed; no body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Columns]
+      operationId: deleteColumn
+      summary: Delete a column and move its tasks to the first remaining column
+      security: [{ viewerCookie: [] }]
+      description: |
+        Reject deletion of the last column. Append displaced tasks in their
+        prior order; normalize column and task positions. Set or clear each
+        moved task's completedAt according to the destination's isDone flag.
+      responses:
+        '204': { description: Column deleted; no body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /boards/{boardId}/columns/{columnId}/position:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/ColumnId'
+    put:
+      tags: [Columns]
+      operationId: moveColumn
+      summary: Move a column in one atomic write
+      security: [{ viewerCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoveColumn' }
+      responses:
+        '204': { description: Column moved; no body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /boards/{boardId}/columns/{columnId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/ColumnId'
+    post:
+      tags: [Tasks]
+      operationId: addTask
+      summary: Append a task to a column
+      security: [{ viewerCookie: [] }]
+      description: completedAt is set if the destination isDone; otherwise null.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskFields' }
+      responses:
+        '201':
+          description: Created task.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Task' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /boards/{boardId}/tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/TaskId'
+    put:
+      tags: [Tasks]
+      operationId: updateTask
+      summary: Replace a task's editable fields
+      security: [{ viewerCookie: [] }]
+      description: |
+        Replace all TaskFields and update updatedAt. Position, columnId,
+        completedAt, and creation time are controlled by the server.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskFields' }
+      responses:
+        '204': { description: Task updated; no body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Tasks]
+      operationId: deleteTask
+      summary: Permanently delete a task
+      security: [{ viewerCookie: [] }]
+      description: Normalize positions in the source column after deletion.
+      responses:
+        '204': { description: Task deleted; no body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /boards/{boardId}/tasks/{taskId}/position:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+      - $ref: '#/components/parameters/TaskId'
+    put:
+      tags: [Tasks]
+      operationId: moveTask
+      summary: Move or reorder one task in one atomic write
+      security: [{ viewerCookie: [] }]
+      description: |
+        Remove the task, insert it at toIndex in the destination (clamped
+        to its valid insertion range), and renumber affected columns. Set
+        completedAt on entry to the designated Done column and clear it on
+        exit. Preserve completedAt when reordering inside Done.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoveTask' }
+      responses:
+        '204': { description: Task moved; no body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /boards/{boardId}/events:
+    parameters:
+      - $ref: '#/components/parameters/BoardId'
+    get:
+      tags: [Boards]
+      operationId: subscribeToBoard
+      summary: Upgrade to a board WebSocket
+      description: |
+        Public for holders of a board ID obtained through the share link.
+        This is a WebSocket upgrade, documented with an OpenAPI extension
+        because OpenAPI does not model WebSocket frames natively. The server
+        sends a board.changed frame after each committed board or member
+        mutation. Frames carry no board data; clients call the board read
+        endpoint after each frame and after every reconnect.
+      x-websocket:
+        server-message:
+          $ref: '#/components/schemas/BoardChangedEvent'
+        client-message: null
+      responses:
+        '101': { description: Switching Protocols to WebSocket. }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    viewerCookie:
+      type: apiKey
+      in: cookie
+      name: miniflow_viewer
+      description: Opaque anonymous board-membership credential issued on join.
+  parameters:
+    BoardId:
+      name: boardId
+      in: path
+      required: true
+      schema: { type: string }
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      schema: { type: string }
+    ColumnId:
+      name: columnId
+      in: path
+      required: true
+      schema: { type: string }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Unauthorized:
+      description: Missing or invalid viewer cookie, or viewer has not joined this board.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    NotFound:
+      description: Board, column, or task not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Conflict:
+      description: The requested operation would violate a board invariant.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    ValidationError:
+      description: Invalid request body or field value.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+  schemas:
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [detail]
+      properties:
+        detail: { type: string }
+    TemplateId:
+      type: string
+      enum: [default, software, weekly]
+    Priority:
+      oneOf:
+        - type: string
+          enum: [low, medium, high]
+        - type: 'null'
+    Member:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, joinedAt]
+      properties:
+        id: { type: string }
+        displayName: { type: string, minLength: 1 }
+        joinedAt: { type: string, format: date-time }
+    BoardColumn:
+      type: object
+      additionalProperties: false
+      required: [id, name, position, isDone]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1 }
+        position: { type: integer, minimum: 0 }
+        isDone: { type: boolean }
+    TaskFields:
+      type: object
+      required: [title, description, priority, dueDate, assigneeId]
+      properties:
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        dueDate:
+          oneOf:
+            - type: string
+              format: date
+            - type: 'null'
+        assigneeId:
+          description: Must be a member of this board when non-null.
+          oneOf:
+            - type: string
+            - type: 'null'
+    Task:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/TaskFields'
+        - type: object
+          required: [id, columnId, position, completedAt, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            columnId: { type: string }
+            position: { type: integer, minimum: 0 }
+            completedAt:
+              oneOf:
+                - type: string
+                  format: date-time
+                - type: 'null'
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    Board:
+      type: object
+      additionalProperties: false
+      required: [id, shareId, name, template, createdAt, columns, tasks, members]
+      properties:
+        id: { type: string }
+        shareId: { type: string }
+        name: { type: string, minLength: 1 }
+        template: { $ref: '#/components/schemas/TemplateId' }
+        createdAt: { type: string, format: date-time }
+        columns:
+          type: array
+          items: { $ref: '#/components/schemas/BoardColumn' }
+        tasks:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/Member' }
+    CreateBoard:
+      type: object
+      additionalProperties: false
+      required: [name, template]
+      properties:
+        name: { type: string, minLength: 1 }
+        template: { $ref: '#/components/schemas/TemplateId' }
+    JoinBoard:
+      type: object
+      additionalProperties: false
+      required: [displayName]
+      properties:
+        displayName: { type: string, minLength: 1 }
+    ColumnName:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+    MoveColumn:
+      type: object
+      additionalProperties: false
+      required: [toIndex]
+      properties:
+        toIndex: { type: integer, minimum: 0 }
+    MoveTask:
+      type: object
+      additionalProperties: false
+      required: [toColumnId, toIndex]
+      properties:
+        toColumnId: { type: string }
+        toIndex: { type: integer, minimum: 0 }
+    BoardChangedEvent:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+          const: board.changed
