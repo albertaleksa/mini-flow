@@ -981,37 +981,40 @@ export default function App() {
         </div>
         <div className="sidebar-boards">
           {boards.map((item, index) => (
-            <button
-              key={item.id}
-              draggable
-              title="Drag to reorder, or press Alt/Option+Up/Down"
-              className={`sidebar-link board-link ${item.shareId === shareId ? "active" : ""} ${draggedBoardId === item.id ? "dragging" : ""}`}
-              onClick={() => navigate(`/board/${item.shareId}`)}
-              onDragStart={(event) => {
-                setDraggedBoardId(item.id);
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", item.id);
-              }}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                const sourceId = event.dataTransfer.getData("text/plain") || draggedBoardId;
-                if (sourceId && sourceId !== item.id) void reorderBoard(sourceId, index);
-                setDraggedBoardId(null);
-              }}
-              onDragEnd={() => setDraggedBoardId(null)}
-              onKeyDown={(event) => {
-                if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+            <div className="sidebar-board-row" key={item.id}>
+              <button
+                draggable
+                title="Drag to reorder, or focus and press Up/Down"
+                className={`sidebar-link board-link ${item.shareId === shareId ? "active" : ""} ${draggedBoardId === item.id ? "dragging" : ""}`}
+                onClick={() => navigate(`/board/${item.shareId}`)}
+                onDragStart={(event) => {
+                  setDraggedBoardId(item.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", item.id);
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
                   event.preventDefault();
-                  void reorderBoard(item.id, index + (event.key === "ArrowUp" ? -1 : 1));
-                }
-              }}
-            >
-              <span className="board-mini-icon">
-                {item.name[0]?.toUpperCase()}
+                  const sourceId = event.dataTransfer.getData("text/plain") || draggedBoardId;
+                  if (sourceId && sourceId !== item.id) void reorderBoard(sourceId, index);
+                  setDraggedBoardId(null);
+                }}
+                onDragEnd={() => setDraggedBoardId(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                    event.preventDefault();
+                    void reorderBoard(item.id, index + (event.key === "ArrowUp" ? -1 : 1));
+                  }
+                }}
+              >
+                <span className="board-mini-icon">{item.name[0]?.toUpperCase()}</span>
+                <span>{item.name}</span>
+              </button>
+              <span className="board-move-actions">
+                <button aria-label={`Move ${item.name} up`} title="Move up" disabled={index === 0} onClick={() => void reorderBoard(item.id, index - 1)}>↑</button>
+                <button aria-label={`Move ${item.name} down`} title="Move down" disabled={index === boards.length - 1} onClick={() => void reorderBoard(item.id, index + 1)}>↓</button>
               </span>
-              <span>{item.name}</span>
-            </button>
+            </div>
           ))}
         </div>
         <button
