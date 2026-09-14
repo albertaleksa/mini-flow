@@ -1,4 +1,5 @@
 import type { BoardService } from "./boardService";
+import { moveBoard, orderBoards, sortBoardsByName } from "./boardOrder";
 import type { Board, BoardColumn, Member, Task, TaskFields, TemplateId } from "../types";
 
 const TOKEN_KEY = "miniflow:api-token:v1";
@@ -66,7 +67,13 @@ export class ApiBoardService implements BoardService {
   async listBoards(): Promise<Board[]> {
     const boards = await this.request<Board[]>("/boards");
     const demo = await this.getBoardByShareId("demo");
-    return demo && !boards.some((board) => board.id === demo.id) ? [demo, ...boards] : boards;
+    return orderBoards(demo && !boards.some((board) => board.id === demo.id) ? [demo, ...boards] : boards, window.localStorage);
+  }
+  async moveBoard(boardId: string, toIndex: number): Promise<void> {
+    moveBoard(await this.listBoards(), boardId, toIndex, window.localStorage);
+  }
+  async sortBoardsByName(): Promise<void> {
+    sortBoardsByName(await this.listBoards(), window.localStorage);
   }
   async getBoardByShareId(shareId: string): Promise<Board | null> {
     const response = await fetch(`${api}/boards/by-share/${encodeURIComponent(shareId)}`);

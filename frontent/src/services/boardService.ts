@@ -10,6 +10,8 @@ import type {
 /** The UI only depends on this contract. */
 export interface BoardService {
   listBoards(): Promise<Board[]>;
+  moveBoard(boardId: string, toIndex: number): Promise<void>;
+  sortBoardsByName(): Promise<void>;
   getBoardByShareId(shareId: string): Promise<Board | null>;
   createBoard(name: string, template: TemplateId): Promise<Board>;
   getViewer(boardId: string): Promise<Member | null>;

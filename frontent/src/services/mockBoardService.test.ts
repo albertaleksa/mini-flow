@@ -40,6 +40,23 @@ describe("MockBoardService", () => {
     ).toMatchObject({ title: "Ship MiniFlow", assigneeId: member.id });
   });
 
+  it("keeps manual and name-sorted board order across service instances", async () => {
+    const service = new MockBoardService();
+    const zulu = await service.createBoard("Zulu", "default");
+    const alpha = await service.createBoard("Alpha", "default");
+    const original = await service.listBoards();
+    await service.moveBoard(alpha.id, 0);
+    expect((await service.listBoards())[0].id).toBe(alpha.id);
+    await service.sortBoardsByName();
+    expect((await new MockBoardService().listBoards()).map((board) => board.name)).toEqual([
+      "Alpha", "Website redesign", "Zulu",
+    ]);
+    await service.moveBoard(zulu.id, 0);
+    expect((await new MockBoardService().listBoards()).map((board) => board.id)).toEqual([
+      zulu.id, alpha.id, original[0].id,
+    ]);
+  });
+
   it("reorders tasks and sets or clears completion when they cross the Done column", async () => {
     const service = new MockBoardService();
     const board = await service.createBoard("Delivery", "default");

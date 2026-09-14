@@ -208,10 +208,31 @@ button {
 .board-label {
   margin-top: 31px;
 }
+.board-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.sidebar-section-label .sort-boards-button {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: #aaa9ff;
+  cursor: pointer;
+}
 .sidebar-boards {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+.board-link {
+  cursor: grab;
+}
+.board-link:active {
+  cursor: grabbing;
+}
+.board-link.dragging {
+  opacity: 0.5;
 }
 .board-link span:nth-child(2) {
   overflow: hidden;

@@ -715,6 +715,7 @@ export default function App() {
   const [profileMenu, setProfileMenu] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
+  const [draggedBoardId, setDraggedBoardId] = useState<string | null>(null);
 
   const navigate = useCallback((path: string) => {
     window.history.pushState({}, "", path);
@@ -802,6 +803,22 @@ export default function App() {
       setToast(
         error instanceof Error ? error.message : "Something went wrong.",
       );
+    }
+  }
+  async function reorderBoard(boardId: string, toIndex: number) {
+    try {
+      await boardService.moveBoard(boardId, toIndex);
+      await reload();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not reorder boards.");
+    }
+  }
+  async function sortBoards() {
+    try {
+      await boardService.sortBoardsByName();
+      await reload();
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not sort boards.");
     }
   }
   async function createBoard(name: string, template: TemplateId) {
@@ -947,21 +964,45 @@ export default function App() {
           <LayoutDashboard size={18} /> Overview
         </button>
         <div className="sidebar-section-label board-label">
-          YOUR BOARDS{" "}
-          <button
-            aria-label="Create board"
-            title="Create board"
-            onClick={() => setModal({ kind: "create" })}
-          >
-            <Plus size={17} />
-          </button>
+          <span>YOUR BOARDS</span>
+          <span className="board-list-actions">
+            <button className="sort-boards-button" aria-label="Sort boards by name" title="Sort boards A–Z" onClick={() => void sortBoards()}>A–Z</button>
+            <button
+              aria-label="Create board"
+              title="Create board"
+              onClick={() => setModal({ kind: "create" })}
+            >
+              <Plus size={17} />
+            </button>
+          </span>
         </div>
         <div className="sidebar-boards">
-          {boards.map((item) => (
+          {boards.map((item, index) => (
             <button
               key={item.id}
-              className={`sidebar-link board-link ${item.shareId === shareId ? "active" : ""}`}
+              draggable
+              title="Drag to reorder, or press Alt+Up/Down"
+              className={`sidebar-link board-link ${item.shareId === shareId ? "active" : ""} ${draggedBoardId === item.id ? "dragging" : ""}`}
               onClick={() => navigate(`/board/${item.shareId}`)}
+              onDragStart={(event) => {
+                setDraggedBoardId(item.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", item.id);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const sourceId = event.dataTransfer.getData("text/plain") || draggedBoardId;
+                if (sourceId && sourceId !== item.id) void reorderBoard(sourceId, index);
+                setDraggedBoardId(null);
+              }}
+              onDragEnd={() => setDraggedBoardId(null)}
+              onKeyDown={(event) => {
+                if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+                  event.preventDefault();
+                  void reorderBoard(item.id, index + (event.key === "ArrowUp" ? -1 : 1));
+                }
+              }}
             >
               <span className="board-mini-icon">
                 {item.name[0]?.toUpperCase()}

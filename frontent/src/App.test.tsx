@@ -15,6 +15,25 @@ describe("MiniFlow frontend", () => {
     new MockBoardService();
   });
 
+  it("sorts boards by name and moves them with the keyboard", async () => {
+    const user = userEvent.setup();
+    const service = new MockBoardService();
+    await service.createBoard("Zulu", "default");
+    await service.createBoard("Alpha", "default");
+    render(<App />);
+    const aside = await screen.findByRole("complementary");
+    const names = () => within(aside).getAllByRole("button")
+      .filter((button) => button.classList.contains("board-link"))
+      .map((button) => button.textContent?.trim());
+    await screen.findByRole("button", { name: /Create your board/i });
+    await user.click(within(aside).getByRole("button", { name: "Sort boards by name" }));
+    expect(names()).toEqual(["AAlpha", "WWebsite redesign", "ZZulu"]);
+    const zulu = within(aside).getByRole("button", { name: "Z Zulu" });
+    zulu.focus();
+    await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    expect(names()).toEqual(["AAlpha", "ZZulu", "WWebsite redesign"]);
+  });
+
   it("opens the workspace menu and navigates to a board", async () => {
     const user = userEvent.setup();
     render(<App />);

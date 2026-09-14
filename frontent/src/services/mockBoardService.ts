@@ -1,4 +1,5 @@
 import type { BoardService } from "./boardService";
+import { moveBoard, orderBoards, sortBoardsByName } from "./boardOrder";
 import type {
   Board,
   BoardColumn,
@@ -196,7 +197,15 @@ export class MockBoardService implements BoardService {
   }
 
   async listBoards(): Promise<Board[]> {
-    return this.read();
+    return orderBoards(this.read(), this.storage);
+  }
+
+  async moveBoard(boardId: string, toIndex: number): Promise<void> {
+    moveBoard(await this.listBoards(), boardId, toIndex, this.storage);
+  }
+
+  async sortBoardsByName(): Promise<void> {
+    sortBoardsByName(await this.listBoards(), this.storage);
   }
 
   async getBoardByShareId(shareId: string): Promise<Board | null> {
