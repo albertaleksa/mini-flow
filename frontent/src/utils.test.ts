@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "./types";
-import { matchesTask } from "./utils";
+import { matchesTask, taskDropIndex } from "./utils";
 
 const task: Task = {
   id: "one",
@@ -35,5 +35,19 @@ describe("task filters", () => {
         "2026-09-13",
       ),
     ).toBe(false);
+  });
+});
+
+describe("task drop positions", () => {
+  it("inserts before or after a task in another column", () => {
+    const target = { ...task, id: "target", columnId: "done", position: 1 };
+    expect(taskDropIndex(task, target, false)).toBe(1);
+    expect(taskDropIndex(task, target, true)).toBe(2);
+  });
+
+  it("accounts for removal of the source within the same column", () => {
+    const target = { ...task, id: "target", position: 2 };
+    expect(taskDropIndex(task, target, false)).toBe(1);
+    expect(taskDropIndex(task, target, true)).toBe(2);
   });
 });

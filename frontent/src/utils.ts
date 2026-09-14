@@ -36,6 +36,13 @@ export function dueLabel(task: Task): string | null {
   });
 }
 
+export function taskDropIndex(source: Task, target: Task, afterTarget: boolean): number {
+  const insertionIndex = target.position + (afterTarget ? 1 : 0);
+  return source.columnId === target.columnId && source.position < insertionIndex
+    ? insertionIndex - 1
+    : insertionIndex;
+}
+
 export function matchesTask(
   task: Task,
   filters: {

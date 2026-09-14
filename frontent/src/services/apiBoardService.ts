@@ -6,7 +6,7 @@ const TOKEN_KEY = "miniflow:api-token:v1";
 const NAME_KEY = "miniflow:display-name:v1";
 const api = "/api";
 
-/** HTTP writes and WebSocket invalidations for the in-memory FastAPI server. */
+/** HTTP writes and WebSocket invalidations for the FastAPI server. */
 export class ApiBoardService implements BoardService {
   private token: string | null = window.localStorage.getItem(TOKEN_KEY);
   private identityPromise: Promise<string> | null = null;

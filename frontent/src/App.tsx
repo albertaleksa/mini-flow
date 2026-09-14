@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { DragDropProvider, useDroppable } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
+import { SortableKeyboardPlugin } from "@dnd-kit/dom/sortable";
 import {
   ArrowLeft,
   ArrowRight,
@@ -34,7 +35,11 @@ import type {
   TemplateId,
 } from "./types";
 import { TEMPLATES } from "./types";
-import { dateKey, dueLabel, initials, matchesTask } from "./utils";
+import { dateKey, dueLabel, initials, matchesTask, taskDropIndex } from "./utils";
+
+// The default optimistic plugin moves React-owned nodes in the DOM during a drag.
+// React must own their placement so a board refresh can safely reconcile columns.
+const sortablePlugins = [SortableKeyboardPlugin];
 
 type Modal =
   | { kind: "create" }
@@ -471,6 +476,7 @@ function TaskCard({
 }) {
   const sortable = useSortable({
     id: `task:${task.id}`,
+    plugins: sortablePlugins,
     index,
     group: task.columnId,
     type: "task",
@@ -578,6 +584,7 @@ function KanbanColumn({
   const [name, setName] = useState(column.name);
   const sortable = useSortable({
     id: `column:${column.id}`,
+    plugins: sortablePlugins,
     index,
     group: "columns",
     type: "column",
@@ -867,27 +874,39 @@ export default function App() {
     const { source, target } = event.operation;
     if (!isSortable(source)) return;
     if (source.type === "column") {
-      if (source.initialIndex !== source.index)
+      const targetIndex = isSortable(target) && target.type === "column"
+        ? target.index
+        : source.initialIndex;
+      if (source.initialIndex !== targetIndex)
         await run(() =>
           boardService.moveColumn(
             board.id,
             String(source.id).slice(7),
-            source.index,
+            targetIndex,
           ),
         );
       return;
     }
     if (source.type === "task") {
       const taskId = String(source.id).slice(5);
-      const targetColumn = String(target?.id).startsWith("drop:")
-        ? String(target?.id).slice(5)
-        : String(source.group ?? source.initialGroup ?? "");
-      if (!targetColumn) return;
-      const toIndex = String(target?.id).startsWith("drop:")
-        ? board.tasks.filter((task) => task.columnId === targetColumn).length
-        : source.index;
       const task = board.tasks.find((item) => item.id === taskId);
-      if (task && (task.columnId !== targetColumn || task.position !== toIndex))
+      if (!task || !target) return;
+      const targetId = String(target.id);
+      const targetTask = targetId.startsWith("task:")
+        ? board.tasks.find((item) => item.id === targetId.slice(5))
+        : null;
+      const targetColumn = targetTask?.columnId ??
+        (targetId.startsWith("drop:") ? targetId.slice(5) : null);
+      if (!targetColumn) return;
+      const draggedCenter = event.operation.shape?.current.center.y;
+      const targetBounds = target.element?.getBoundingClientRect();
+      const afterTarget = targetTask && draggedCenter !== undefined && targetBounds
+        ? draggedCenter >= targetBounds.top + targetBounds.height / 2
+        : false;
+      const toIndex = targetTask
+        ? taskDropIndex(task, targetTask, afterTarget)
+        : board.tasks.filter((item) => item.columnId === targetColumn).length;
+      if (task.columnId !== targetColumn || task.position !== toIndex)
         await run(() =>
           boardService.moveTask(board.id, taskId, targetColumn, toIndex),
         );
