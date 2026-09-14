@@ -34,9 +34,9 @@ describe("MiniFlow frontend", () => {
     zulu.focus();
     await user.keyboard("{ArrowDown}");
     expect(names()).toEqual(["WWebsite redesign", "ZZulu", "AAlpha"]);
-    await user.click(within(aside).getByRole("button", { name: "Move Zulu up" }));
+    zulu.focus();
+    await user.keyboard("{ArrowUp}");
     expect(names()).toEqual(["ZZulu", "WWebsite redesign", "AAlpha"]);
-    expect(within(aside).getByRole("button", { name: "Move Zulu up" })).toBeDisabled();
     expect(within(aside).getByRole("button", { name: "Sort boards A–Z" })).toBeInTheDocument();
   });
 

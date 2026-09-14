@@ -241,28 +241,6 @@ button {
 .board-link.dragging {
   opacity: 0.5;
 }
-.board-move-actions {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 20px;
-}
-.board-move-actions button {
-  height: 18px;
-  padding: 0;
-  background: transparent;
-  color: #999db7;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-.board-move-actions button:hover:not(:disabled),
-.board-move-actions button:focus-visible {
-  color: #fff;
-}
-.board-move-actions button:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
 .board-link span:nth-child(2) {
   overflow: hidden;
   text-overflow: ellipsis;

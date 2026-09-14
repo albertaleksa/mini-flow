@@ -1010,10 +1010,6 @@ export default function App() {
                 <span className="board-mini-icon">{item.name[0]?.toUpperCase()}</span>
                 <span>{item.name}</span>
               </button>
-              <span className="board-move-actions">
-                <button aria-label={`Move ${item.name} up`} title="Move up" disabled={index === 0} onClick={() => void reorderBoard(item.id, index - 1)}>↑</button>
-                <button aria-label={`Move ${item.name} down`} title="Move down" disabled={index === boards.length - 1} onClick={() => void reorderBoard(item.id, index + 1)}>↓</button>
-              </span>
             </div>
           ))}
         </div>
