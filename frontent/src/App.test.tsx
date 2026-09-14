@@ -51,6 +51,25 @@ describe("MiniFlow frontend", () => {
     expect(await screen.findByRole("heading", { name: "Join Website redesign" })).toBeInTheDocument();
   });
 
+  it("keeps Overview visible when its route is selected again", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /Website redesign.*8 tasks/i }));
+    expect(await screen.findByRole("heading", { name: "Join Website redesign" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Overview" }));
+    expect(await screen.findByRole("heading", { name: /Good work starts/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Overview" }));
+    expect(screen.getByRole("heading", { name: /Good work starts/i })).toBeInTheDocument();
+    expect(screen.queryByText("Loading your workspace…")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /My workspace/i }));
+    await user.click(screen.getByRole("menuitem", { name: "All boards" }));
+    expect(screen.getByRole("heading", { name: /Good work starts/i })).toBeInTheDocument();
+    expect(screen.queryByText("Mock workspace")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Guest")).not.toBeInTheDocument();
+  });
+
   it("changes the current board member display name from the sidebar", async () => {
     const user = userEvent.setup();
     render(<App />);

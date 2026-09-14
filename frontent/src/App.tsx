@@ -726,6 +726,11 @@ export default function App() {
   const [boardSortDirection, setBoardSortDirection] = useState(boardService.getBoardSortDirection());
 
   const navigate = useCallback((path: string) => {
+    if (window.location.pathname === path) {
+      setWorkspaceMenu(false);
+      setProfileMenu(false);
+      return;
+    }
     window.history.pushState({}, "", path);
     setShareId(routeShareId());
     setBoard(null);
@@ -1092,20 +1097,17 @@ export default function App() {
             <span>/</span>
             <strong>{board?.name ?? (shareId ? "Board" : "Overview")}</strong>
           </div>
-          <div className="topbar-right">
-            <span className="mock-pill">
-              <span /> Mock workspace
-            </span>
-            {board && viewer && (
+          {board && viewer && (
+            <div className="topbar-right">
               <button
                 className="button button-outline topbar-share"
                 onClick={() => setModal({ kind: "share" })}
               >
                 <Link2 size={16} /> Share board
               </button>
-            )}
-            <Avatar name={viewer?.displayName ?? "Guest"} size="small" />
-          </div>
+              <Avatar name={viewer.displayName} size="small" />
+            </div>
+          )}
         </header>
         <main className="main-content">
           {loading ? (
@@ -1226,7 +1228,7 @@ export default function App() {
             <div className="not-found">
               <ClipboardList size={40} />
               <h1>Board not found</h1>
-              <p>This link does not point to a board in this mock workspace.</p>
+              <p>This link does not point to an available board.</p>
               <button
                 className="button button-primary"
                 onClick={() => navigate("/")}
