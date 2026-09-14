@@ -48,12 +48,19 @@ describe("MockBoardService", () => {
     await service.moveBoard(alpha.id, 0);
     expect((await service.listBoards())[0].id).toBe(alpha.id);
     await service.sortBoardsByName();
+    expect(service.getBoardSortDirection()).toBe("asc");
     expect((await new MockBoardService().listBoards()).map((board) => board.name)).toEqual([
       "Alpha", "Website redesign", "Zulu",
     ]);
-    await service.moveBoard(zulu.id, 0);
+    await service.sortBoardsByName();
+    expect(service.getBoardSortDirection()).toBe("desc");
+    expect((await new MockBoardService().listBoards()).map((board) => board.name)).toEqual([
+      "Zulu", "Website redesign", "Alpha",
+    ]);
+    await service.moveBoard(alpha.id, 0);
+    expect(service.getBoardSortDirection()).toBeNull();
     expect((await new MockBoardService().listBoards()).map((board) => board.id)).toEqual([
-      zulu.id, alpha.id, original[0].id,
+      alpha.id, zulu.id, original[0].id,
     ]);
   });
 

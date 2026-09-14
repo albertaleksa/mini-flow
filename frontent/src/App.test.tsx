@@ -26,12 +26,15 @@ describe("MiniFlow frontend", () => {
       .filter((button) => button.classList.contains("board-link"))
       .map((button) => button.textContent?.trim());
     await screen.findByRole("button", { name: /Create your board/i });
-    await user.click(within(aside).getByRole("button", { name: "Sort boards by name" }));
+    await user.click(within(aside).getByRole("button", { name: "Sort boards A–Z" }));
     expect(names()).toEqual(["AAlpha", "WWebsite redesign", "ZZulu"]);
+    await user.click(within(aside).getByRole("button", { name: "Sort boards Z–A" }));
+    expect(names()).toEqual(["ZZulu", "WWebsite redesign", "AAlpha"]);
     const zulu = within(aside).getByRole("button", { name: "Z Zulu" });
     zulu.focus();
-    await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
-    expect(names()).toEqual(["AAlpha", "ZZulu", "WWebsite redesign"]);
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(names()).toEqual(["WWebsite redesign", "ZZulu", "AAlpha"]);
+    expect(within(aside).getByRole("button", { name: "Sort boards A–Z" })).toBeInTheDocument();
   });
 
   it("opens the workspace menu and navigates to a board", async () => {

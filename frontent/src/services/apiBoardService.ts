@@ -1,5 +1,5 @@
 import type { BoardService } from "./boardService";
-import { moveBoard, orderBoards, sortBoardsByName } from "./boardOrder";
+import { boardSortDirection, moveBoard, orderBoards, sortBoardsByName } from "./boardOrder";
 import type { Board, BoardColumn, Member, Task, TaskFields, TemplateId } from "../types";
 
 const TOKEN_KEY = "miniflow:api-token:v1";
@@ -71,6 +71,9 @@ export class ApiBoardService implements BoardService {
   }
   async moveBoard(boardId: string, toIndex: number): Promise<void> {
     moveBoard(await this.listBoards(), boardId, toIndex, window.localStorage);
+  }
+  getBoardSortDirection(): "asc" | "desc" | null {
+    return boardSortDirection(window.localStorage);
   }
   async sortBoardsByName(): Promise<void> {
     sortBoardsByName(await this.listBoards(), window.localStorage);

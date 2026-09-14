@@ -716,6 +716,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [draggedBoardId, setDraggedBoardId] = useState<string | null>(null);
+  const [boardSortDirection, setBoardSortDirection] = useState(boardService.getBoardSortDirection());
 
   const navigate = useCallback((path: string) => {
     window.history.pushState({}, "", path);
@@ -808,6 +809,7 @@ export default function App() {
   async function reorderBoard(boardId: string, toIndex: number) {
     try {
       await boardService.moveBoard(boardId, toIndex);
+      setBoardSortDirection(boardService.getBoardSortDirection());
       await reload();
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Could not reorder boards.");
@@ -816,6 +818,7 @@ export default function App() {
   async function sortBoards() {
     try {
       await boardService.sortBoardsByName();
+      setBoardSortDirection(boardService.getBoardSortDirection());
       await reload();
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Could not sort boards.");
@@ -966,7 +969,7 @@ export default function App() {
         <div className="sidebar-section-label board-label">
           <span>YOUR BOARDS</span>
           <span className="board-list-actions">
-            <button className="sort-boards-button" aria-label="Sort boards by name" title="Sort boards A–Z" onClick={() => void sortBoards()}>A–Z</button>
+            <button className="sort-boards-button" aria-label={`Sort boards ${boardSortDirection === "asc" ? "Z–A" : "A–Z"}`} title={`Sort boards ${boardSortDirection === "asc" ? "Z–A" : "A–Z"}`} onClick={() => void sortBoards()}>{boardSortDirection === "asc" ? "Z–A" : "A–Z"}</button>
             <button
               aria-label="Create board"
               title="Create board"
@@ -981,7 +984,7 @@ export default function App() {
             <button
               key={item.id}
               draggable
-              title="Drag to reorder, or press Alt+Up/Down"
+              title="Drag to reorder, or press Alt/Option+Up/Down"
               className={`sidebar-link board-link ${item.shareId === shareId ? "active" : ""} ${draggedBoardId === item.id ? "dragging" : ""}`}
               onClick={() => navigate(`/board/${item.shareId}`)}
               onDragStart={(event) => {

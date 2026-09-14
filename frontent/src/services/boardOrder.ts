@@ -1,6 +1,13 @@
 import type { Board } from "../types";
 
 const ORDER_KEY = "miniflow:board-order:v1";
+const SORT_KEY = "miniflow:board-sort:v1";
+export type BoardSortDirection = "asc" | "desc";
+
+export function boardSortDirection(storage: Storage): BoardSortDirection | null {
+  const value = storage.getItem(SORT_KEY);
+  return value === "asc" || value === "desc" ? value : null;
+}
 
 function savedIds(storage: Storage): string[] {
   try {
@@ -25,9 +32,14 @@ export function moveBoard(boards: Board[], boardId: string, toIndex: number, sto
   const [board] = ordered.splice(from, 1);
   ordered.splice(Math.max(0, Math.min(toIndex, ordered.length)), 0, board);
   storage.setItem(ORDER_KEY, JSON.stringify(ordered.map((item) => item.id)));
+  storage.removeItem(SORT_KEY);
 }
 
 export function sortBoardsByName(boards: Board[], storage: Storage): void {
-  const sorted = [...boards].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const direction = boardSortDirection(storage) === "asc" ? "desc" : "asc";
+  const sorted = [...boards].sort((a, b) => direction === "asc"
+    ? a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    : b.name.localeCompare(a.name, undefined, { sensitivity: "base" }));
   storage.setItem(ORDER_KEY, JSON.stringify(sorted.map((board) => board.id)));
+  storage.setItem(SORT_KEY, direction);
 }

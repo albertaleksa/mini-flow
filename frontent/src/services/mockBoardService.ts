@@ -1,5 +1,5 @@
 import type { BoardService } from "./boardService";
-import { moveBoard, orderBoards, sortBoardsByName } from "./boardOrder";
+import { boardSortDirection, moveBoard, orderBoards, sortBoardsByName } from "./boardOrder";
 import type {
   Board,
   BoardColumn,
@@ -204,6 +204,9 @@ export class MockBoardService implements BoardService {
     moveBoard(await this.listBoards(), boardId, toIndex, this.storage);
   }
 
+  getBoardSortDirection(): "asc" | "desc" | null {
+    return boardSortDirection(this.storage);
+  }
   async sortBoardsByName(): Promise<void> {
     sortBoardsByName(await this.listBoards(), this.storage);
   }

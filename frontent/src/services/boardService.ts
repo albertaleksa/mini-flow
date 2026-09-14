@@ -12,6 +12,7 @@ export interface BoardService {
   listBoards(): Promise<Board[]>;
   moveBoard(boardId: string, toIndex: number): Promise<void>;
   sortBoardsByName(): Promise<void>;
+  getBoardSortDirection(): "asc" | "desc" | null;
   getBoardByShareId(shareId: string): Promise<Board | null>;
   createBoard(name: string, template: TemplateId): Promise<Board>;
   getViewer(boardId: string): Promise<Member | null>;
