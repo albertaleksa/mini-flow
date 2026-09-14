@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+vi.mock("./services", async () => {
+  const { MockBoardService } = await import("./services/mockBoardService");
+  return { boardService: new MockBoardService() };
+});
 import App from "./App";
 import { MockBoardService } from "./services/mockBoardService";
 
@@ -9,6 +13,33 @@ describe("MiniFlow frontend", () => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/");
     new MockBoardService();
+  });
+
+  it("opens the workspace menu and navigates to a board", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("button", { name: /Create your board/i });
+    await user.click(screen.getByRole("button", { name: /My workspace/i }));
+    const menu = screen.getByRole("menu", { name: "Workspace boards" });
+    expect(within(menu).getByRole("menuitem", { name: "Website redesign" })).toBeInTheDocument();
+    await user.click(within(menu).getByRole("menuitem", { name: "Website redesign" }));
+    expect(await screen.findByRole("heading", { name: "Join Website redesign" })).toBeInTheDocument();
+  });
+
+  it("changes the current board member display name from the sidebar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /Website redesign.*8 tasks/i }));
+    await user.type(screen.getByLabelText("Your display name"), "Alex");
+    await user.click(screen.getByRole("button", { name: "Join board" }));
+    await user.click(await screen.findByRole("button", { name: /Alex Board member/i }));
+    const menu = screen.getByRole("menu", { name: "Board member actions" });
+    await user.click(within(menu).getByRole("menuitem", { name: "Change display name" }));
+    const input = screen.getByLabelText("Display name");
+    await user.clear(input);
+    await user.type(input, "Sam");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    expect(await screen.findByRole("button", { name: /Sam Board member/i })).toBeInTheDocument();
   });
 
   it("creates a board from a template and joins with a display name", async () => {

@@ -116,6 +116,10 @@ button {
   top: 10px;
 }
 .workspace-switch {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -135,7 +139,7 @@ button {
   height: 33px;
   font-weight: 800;
 }
-.workspace-switch div {
+.workspace-label {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -271,13 +275,18 @@ button {
   margin: 5px 0 0;
 }
 .sidebar-profile {
+  width: 100%;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   border-top: 1px solid #30344e;
   padding: 16px 5px 0;
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.sidebar-profile div {
+.sidebar-profile-text {
   min-width: 0;
   flex: 1;
   display: flex;
@@ -297,6 +306,40 @@ button {
 }
 .sidebar-profile > svg {
   color: #858aa7;
+}
+.sidebar-menu-container {
+  position: relative;
+}
+.sidebar-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% - 27px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border: 1px solid #393d59;
+  border-radius: 10px;
+  background: #242841;
+  box-shadow: 0 12px 28px #11142680;
+}
+.sidebar-menu.profile-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.sidebar-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 10px;
+  text-align: left;
+  background: transparent;
+  color: #f3f3fa;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sidebar-menu button:hover,
+.sidebar-menu button:focus-visible {
+  background: #393d59;
 }
 .avatar {
   height: 34px;
@@ -1620,6 +1663,7 @@ button {
     margin: 0;
     font-size: 19px;
   }
+  .sidebar-menu-container,
   .workspace-switch,
   .sidebar-section-label,
   .sidebar-link,

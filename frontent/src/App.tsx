@@ -40,6 +40,7 @@ type Modal =
   | { kind: "create" }
   | { kind: "task"; columnId: string; taskId?: string }
   | { kind: "share" }
+  | { kind: "renameViewer" }
   | { kind: "deleteTask"; taskId: string }
   | { kind: "deleteColumn"; columnId: string }
   | null;
@@ -707,12 +708,18 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [columnName, setColumnName] = useState("");
   const [addingColumn, setAddingColumn] = useState(false);
+  const [workspaceMenu, setWorkspaceMenu] = useState(false);
+  const [profileMenu, setProfileMenu] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   const navigate = useCallback((path: string) => {
     window.history.pushState({}, "", path);
     setShareId(routeShareId());
     setFilters(EMPTY_FILTERS);
     setModal(null);
+    setWorkspaceMenu(false);
+    setProfileMenu(false);
   }, []);
   const reload = useCallback(async () => {
     const nextBoards = await boardService.listBoards();
@@ -746,6 +753,27 @@ export default function App() {
       void reload();
     });
   }, [board?.id, reload]);
+  useEffect(() => {
+    if (!workspaceMenu && !profileMenu) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as Element).closest(".sidebar-menu-container")) {
+        setWorkspaceMenu(false);
+        setProfileMenu(false);
+      }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setWorkspaceMenu(false);
+        setProfileMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [workspaceMenu, profileMenu]);
   useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(""), 3200);
@@ -863,13 +891,38 @@ export default function App() {
             mini<span>flow</span>
           </span>
         </button>
-        <div className="workspace-switch">
-          <span className="workspace-icon">M</span>
-          <div>
-            <strong>My workspace</strong>
-            <small>Free workspace</small>
-          </div>
-          <ChevronDown size={15} />
+        <div className="sidebar-menu-container">
+          <button
+            type="button"
+            className="workspace-switch"
+            aria-expanded={workspaceMenu}
+            aria-haspopup="menu"
+            onClick={() => {
+              setWorkspaceMenu(!workspaceMenu);
+              setProfileMenu(false);
+            }}
+          >
+            <span className="workspace-icon">M</span>
+            <span className="workspace-label">
+              <strong>My workspace</strong>
+              <small>{boards.length} boards</small>
+            </span>
+            <ChevronDown size={15} />
+          </button>
+          {workspaceMenu && (
+            <div className="sidebar-menu" role="menu" aria-label="Workspace boards">
+              <button role="menuitem" onClick={() => navigate("/")}>All boards</button>
+              {boards.map((item) => (
+                <button key={item.id} role="menuitem" onClick={() => navigate(`/board/${item.shareId}`)}>
+                  {item.name}
+                </button>
+              ))}
+              <button role="menuitem" onClick={() => {
+                setWorkspaceMenu(false);
+                setModal({ kind: "create" });
+              }}>Create board</button>
+            </div>
+          )}
         </div>
         <div className="sidebar-section-label">WORKSPACE</div>
         <button
@@ -918,14 +971,40 @@ export default function App() {
               <p>A simple place to keep work moving.</p>
             </div>
           </div>
-          <div className="sidebar-profile">
-            <Avatar name={viewer?.displayName ?? "Your workspace"} />
-            <div>
-              <strong>{viewer?.displayName ?? "Your workspace"}</strong>
-              <small>{viewer ? "Board member" : "Ready when you are"}</small>
+          {board && viewer && (
+            <div className="sidebar-menu-container">
+              {profileMenu && (
+                <div className="sidebar-menu profile-menu" role="menu" aria-label="Board member actions">
+                  <button role="menuitem" onClick={() => {
+                    setDisplayName(viewer.displayName);
+                    setProfileMenu(false);
+                    setModal({ kind: "renameViewer" });
+                  }}>Change display name</button>
+                  <button role="menuitem" onClick={() => {
+                    setProfileMenu(false);
+                    setModal({ kind: "share" });
+                  }}>Share board</button>
+                </div>
+              )}
+              <button
+                type="button"
+                className="sidebar-profile"
+                aria-expanded={profileMenu}
+                aria-haspopup="menu"
+                onClick={() => {
+                  setProfileMenu(!profileMenu);
+                  setWorkspaceMenu(false);
+                }}
+              >
+                <Avatar name={viewer.displayName} />
+                <span className="sidebar-profile-text">
+                  <strong>{viewer.displayName}</strong>
+                  <small>Board member</small>
+                </span>
+                <MoreHorizontal size={17} />
+              </button>
             </div>
-            <MoreHorizontal size={17} />
-          </div>
+          )}
         </div>
       </aside>
 
@@ -1332,6 +1411,40 @@ export default function App() {
           onCreate={createBoard}
         />
       )}
+      {board && viewer && modal?.kind === "renameViewer" && (
+        <Dialog onClose={() => setModal(null)}>
+          <div className="dialog-heading">
+            <div>
+              <span className="eyebrow">BOARD MEMBER</span>
+              <h2>Change display name</h2>
+              <p>This name appears on the board and on assigned tasks.</p>
+            </div>
+            <button className="icon-button" aria-label="Close" onClick={() => setModal(null)}><X size={19} /></button>
+          </div>
+          <form onSubmit={async (event) => {
+            event.preventDefault();
+            if (!displayName.trim()) return;
+            setSavingName(true);
+            try {
+              await boardService.joinBoard(board.id, displayName.trim());
+              await reload();
+              setModal(null);
+              setToast("Display name updated.");
+            } catch (error) {
+              setToast(error instanceof Error ? error.message : "Could not update display name.");
+            } finally {
+              setSavingName(false);
+            }
+          }}>
+            <label className="field-label" htmlFor="viewer-display-name">Display name</label>
+            <input id="viewer-display-name" className="field-input" autoFocus value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={80} required />
+            <div className="dialog-actions">
+              <button type="button" className="button button-ghost" onClick={() => setModal(null)}>Cancel</button>
+              <button className="button button-primary" disabled={savingName || !displayName.trim()}>{savingName ? "Saving…" : "Save name"}</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
       {board && modal?.kind === "share" && (
         <Dialog onClose={() => setModal(null)}>
           <div className="dialog-heading">
@@ -1365,8 +1478,7 @@ export default function App() {
             </button>
           </div>
           <p className="share-note">
-            In mock mode, data is shared between tabs in this browser. A real
-            backend will enable sharing across devices.
+            People with this link can open the board from another browser or device.
           </p>
           <div className="dialog-actions">
             <button
