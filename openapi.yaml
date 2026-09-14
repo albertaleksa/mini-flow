@@ -401,7 +401,7 @@ paths:
         - Boards
       operationId: subscribeToBoard
       summary: Upgrade to a board WebSocket
-      description: Public WebSocket upgrade for a board ID. After each member, column, or task mutation, the server
+      description: Public WebSocket upgrade for a board ID. After each member, column, or task mutation commits, the server
         sends board.changed with no board payload. Clients fetch the board after each frame and after reconnecting;
         the frontend polls every three seconds while disconnected. Subscriptions work within a single backend process
         only.

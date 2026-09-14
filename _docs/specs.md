@@ -13,6 +13,7 @@ MiniFlow is a desktop-first Kanban app for personal work and small teams. This d
 - One column per board can be designated Done. Entering it sets `completedAt`; leaving it clears `completedAt`. Reordering within Done preserves the timestamp.
 - Search by task title and filters for priority, due status, and assignee run in the frontend against the current board. Overdue tasks are marked visually; no reminders or automatic changes occur.
 - The **Your boards** list can be dragged into a manual order or sorted A–Z/Z–A by repeatedly clicking the sort control. A focused board entry can move with Up/Down. This board-list order is a local browser preference and also controls the workspace menu and overview; it does not change another person's list.
+- Selecting the current Overview or board again leaves its loaded view visible. The top bar shows a member avatar only when the viewer has joined the current board; there is no global profile indicator.
 
 ## Data, identity, and collaboration
 
@@ -20,7 +21,7 @@ The frontend in `frontent/` uses `ApiBoardService` for all board data access. It
 
 The FastAPI backend in `backend/` stores boards, columns, tasks, members, credentials, and tokens in a SQLAlchemy database. SQLite at `backend/miniflow.db` is the default; `MINIFLOW_DATABASE_URL` selects another SQLAlchemy database URL. Alembic migrations run on startup. Restarting the backend retains data and tokens. WebSocket subscribers remain in process memory, so use a single worker for notifications.
 
-Normal writes use HTTP. After a member, column, or task change commits, the backend sends a `{"type":"board.changed"}` WebSocket frame to subscribers of that board. The frontend fetches the full board after a frame and after reconnecting. If WebSockets are unavailable, it polls the board every three seconds and retries the connection. Concurrent writes are last-write-wins; there is no conflict-resolution UI.
+Normal writes use HTTP. A task or column drag saves one update on drop; React controls card and column DOM placement during dragging. After a member, column, or task change commits, the backend sends a `{"type":"board.changed"}` WebSocket frame to subscribers of that board. The frontend fetches the full board after a frame and after reconnecting. If WebSockets are unavailable, it polls the board every three seconds and retries the connection. Concurrent writes are last-write-wins; there is no conflict-resolution UI.
 
 Public reads use a board's share ID. Board creation is public, but associating it with the current browser requires a valid bearer token; the frontend supplies one. Joining and all column/task writes require a valid token, and writes require membership on that board. The same browser can join multiple boards. The browser's board list contains boards it created or joined, plus the frontend's pinned Demo Board.
 
