@@ -13,9 +13,9 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite. The frontend uses the FastAPI backend through Vite's `/api` proxy, including board WebSockets. If a WebSocket cannot connect, the client refreshes board state every three seconds and retries the connection. The backend's seeded **Demo Board** appears on the home page. Enter a display name to join it; create boards from the home page and share board links across browsers. The backend stores data in memory, so boards, memberships, and tasks reset when it restarts.
+Open the URL printed by Vite. The frontend uses the FastAPI backend through Vite's `/api` proxy, including board WebSockets. If a WebSocket cannot connect, the client refreshes board state every three seconds and retries the connection. The backend's seeded **Demo Board** appears on the home page. Enter a display name to join it; create boards from the home page and share board links across browsers. The backend persists boards, memberships, tasks, credentials, and tokens in SQLite by default.
 
-The frontend creates a random browser credential to obtain a bearer token for protected backend requests. It stores the token in this browser's `localStorage` and creates a new credential if the backend restarts and invalidates the token. This keeps the existing display-name join flow; it is not a user account or a cross-device identity.
+The frontend creates a random browser credential to obtain a bearer token for protected backend requests. It stores the token in this browser's `localStorage`; the token survives a normal backend restart. This keeps the existing display-name join flow; it is not a user-managed account or a cross-device identity.
 
 ```bash
 npm test
