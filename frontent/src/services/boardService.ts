@@ -7,12 +7,13 @@ import type {
   TemplateId,
 } from "../types";
 
-/** The UI only depends on this contract. A FastAPI adapter can replace the mock. */
+/** The UI only depends on this contract. */
 export interface BoardService {
   listBoards(): Promise<Board[]>;
   getBoardByShareId(shareId: string): Promise<Board | null>;
   createBoard(name: string, template: TemplateId): Promise<Board>;
   getViewer(boardId: string): Promise<Member | null>;
+  getPreferredDisplayName(): string | null;
   joinBoard(boardId: string, displayName: string): Promise<Member>;
   addColumn(boardId: string, name: string): Promise<BoardColumn>;
   renameColumn(boardId: string, columnId: string, name: string): Promise<void>;

@@ -1,18 +1,27 @@
 # MiniFlow frontend
 
-The frontend runs with a local mock service. Boards, members, tasks, and ordering are stored in this browser's `localStorage`; changes in another tab of the same browser profile appear automatically. Sharing across browsers or devices will require the future FastAPI backend.
+Start the backend and frontend in separate terminals from the repository root:
+
+```bash
+make install
+make run
+```
 
 ```bash
 cd frontent
-npm install
+npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite. The sample **Website redesign** board gives you tasks to try. Enter a display name when joining. You can create boards from templates, add and edit tasks, drag tasks and columns, search and filter, and copy board links.
+Open the URL printed by Vite. The frontend uses the FastAPI backend through Vite's `/api` proxy, including board WebSockets. If a WebSocket cannot connect, the client refreshes board state every three seconds and retries the connection. The backend's seeded **Demo Board** appears on the home page. Enter a display name to join it; create boards from the home page and share board links across browsers. The backend stores data in memory, so boards, memberships, and tasks reset when it restarts.
+
+The frontend creates a random browser credential to obtain a bearer token for protected backend requests. It stores the token in this browser's `localStorage` and creates a new credential if the backend restarts and invalidates the token. This keeps the existing display-name join flow; it is not a user account or a cross-device identity.
 
 ```bash
 npm test
 npm run build
 ```
 
-All data operations are defined by `src/services/boardService.ts` and implemented by `src/services/mockBoardService.ts`. Replace the export in `src/services/index.ts` with a FastAPI-backed implementation when the backend is ready.
+Board data access remains behind `src/services/boardService.ts`; `src/services/apiBoardService.ts` implements the real API client. The old mock remains for its isolated tests.
+
+Each board has its own share link and member list. Send the link to a person to invite them; the same person can join multiple boards. Display names belong to board memberships, so they may differ by board. The browser remembers the last name used, pre-fills it when joining another shared board, and automatically uses it when creating another board. Click the member count on a board to see everyone who has joined. There are no email invitations or roles in this MVP.

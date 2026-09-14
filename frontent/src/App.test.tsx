@@ -42,6 +42,22 @@ describe("MiniFlow frontend", () => {
     expect(await screen.findByRole("button", { name: /Sam Board member/i })).toBeInTheDocument();
   });
 
+  it("reuses a known name on a new board and lists its members", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /Website redesign.*8 tasks/i }));
+    await user.type(screen.getByLabelText("Your display name"), "CCC");
+    await user.click(screen.getByRole("button", { name: "Join board" }));
+    await screen.findByRole("button", { name: /CCC Board member/i });
+    await user.click(screen.getByRole("button", { name: "Create a board" }));
+    await user.type(screen.getByLabelText("Board name"), "Second board");
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Create board" }));
+    expect(await screen.findByRole("heading", { name: "Second board" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Join Second board" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /1 members/ }));
+    expect(within(screen.getByRole("dialog")).getByText("CCC (you)")).toBeInTheDocument();
+  });
+
   it("creates a board from a template and joins with a display name", async () => {
     const user = userEvent.setup();
     render(<App />);

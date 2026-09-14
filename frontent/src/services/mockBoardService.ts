@@ -12,6 +12,7 @@ import { dateKey } from "../utils";
 
 const DATA_KEY = "miniflow:boards:v1";
 const VIEWER_KEY = "miniflow:viewers:v1";
+const NAME_KEY = "miniflow:display-name:v1";
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -224,6 +225,10 @@ export class MockBoardService implements BoardService {
     return board;
   }
 
+  getPreferredDisplayName(): string | null {
+    return this.storage.getItem(NAME_KEY);
+  }
+
   async getViewer(boardId: string): Promise<Member | null> {
     const memberId = this.viewers()[boardId];
     return (
@@ -251,6 +256,7 @@ export class MockBoardService implements BoardService {
       board.members.push(joined);
       return joined;
     });
+    this.storage.setItem(NAME_KEY, member.displayName);
     this.storage.setItem(
       VIEWER_KEY,
       JSON.stringify({ ...this.viewers(), [boardId]: member.id }),

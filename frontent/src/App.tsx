@@ -41,6 +41,7 @@ type Modal =
   | { kind: "task"; columnId: string; taskId?: string }
   | { kind: "share" }
   | { kind: "renameViewer" }
+  | { kind: "members" }
   | { kind: "deleteTask"; taskId: string }
   | { kind: "deleteColumn"; columnId: string }
   | null;
@@ -205,12 +206,14 @@ function CreateBoardDialog({
 
 function JoinDialog({
   board,
+  initialName,
   onJoin,
 }: {
   board: Board;
+  initialName: string | null;
   onJoin: (name: string) => Promise<void>;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [saving, setSaving] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -716,6 +719,9 @@ export default function App() {
   const navigate = useCallback((path: string) => {
     window.history.pushState({}, "", path);
     setShareId(routeShareId());
+    setBoard(null);
+    setViewer(null);
+    setLoading(true);
     setFilters(EMPTY_FILTERS);
     setModal(null);
     setWorkspaceMenu(false);
@@ -723,11 +729,15 @@ export default function App() {
   }, []);
   const reload = useCallback(async () => {
     const nextBoards = await boardService.listBoards();
+    if (routeShareId() !== shareId) return;
     setBoards(nextBoards);
     if (shareId) {
       const nextBoard = await boardService.getBoardByShareId(shareId);
+      if (routeShareId() !== shareId) return;
+      const nextViewer = nextBoard ? await boardService.getViewer(nextBoard.id) : null;
+      if (routeShareId() !== shareId) return;
       setBoard(nextBoard);
-      setViewer(nextBoard ? await boardService.getViewer(nextBoard.id) : null);
+      setViewer(nextViewer);
     } else {
       setBoard(null);
       setViewer(null);
@@ -738,6 +748,9 @@ export default function App() {
   useEffect(() => {
     const onPop = () => {
       setShareId(routeShareId());
+      setBoard(null);
+      setViewer(null);
+      setLoading(true);
       setModal(null);
     };
     window.addEventListener("popstate", onPop);
@@ -793,6 +806,8 @@ export default function App() {
   }
   async function createBoard(name: string, template: TemplateId) {
     const created = await boardService.createBoard(name, template);
+    const preferredName = boardService.getPreferredDisplayName();
+    if (preferredName) await boardService.joinBoard(created.id, preferredName);
     navigate(`/board/${created.shareId}`);
     setToast("Board created.");
   }
@@ -1170,14 +1185,14 @@ export default function App() {
                   <p>Everything in its place. Keep your team moving forward.</p>
                 </div>
                 <div className="board-heading-actions">
-                  <div className="members-group">
-                    <div className="avatar-stack">
+                  <button className="members-group" onClick={() => setModal({ kind: "members" })}>
+                    <span className="avatar-stack">
                       {board.members.slice(0, 4).map((member) => (
                         <Avatar key={member.id} name={member.displayName} />
                       ))}
-                    </div>
+                    </span>
                     <span>{board.members.length} members</span>
-                  </div>
+                  </button>
                   <button
                     className="button button-primary"
                     onClick={() =>
@@ -1411,6 +1426,29 @@ export default function App() {
           onCreate={createBoard}
         />
       )}
+      {board && modal?.kind === "members" && (
+        <Dialog onClose={() => setModal(null)}>
+          <div className="dialog-heading">
+            <div>
+              <span className="eyebrow">BOARD MEMBERS</span>
+              <h2>People on {board.name}</h2>
+              <p>Everyone who joined this board can view and edit it.</p>
+            </div>
+            <button className="icon-button" aria-label="Close" onClick={() => setModal(null)}><X size={19} /></button>
+          </div>
+          <ul className="member-list">
+            {board.members.map((member) => (
+              <li key={member.id}>
+                <Avatar name={member.displayName} />
+                <span>{member.displayName}{member.id === viewer?.id ? " (you)" : ""}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="dialog-actions">
+            <button className="button button-outline" onClick={() => setModal({ kind: "share" })}>Share board link</button>
+          </div>
+        </Dialog>
+      )}
       {board && viewer && modal?.kind === "renameViewer" && (
         <Dialog onClose={() => setModal(null)}>
           <div className="dialog-heading">
@@ -1590,7 +1628,7 @@ export default function App() {
         </Dialog>
       )}
       {board && !viewer && !loading && (
-        <JoinDialog board={board} onJoin={join} />
+        <JoinDialog board={board} initialName={boardService.getPreferredDisplayName()} onJoin={join} />
       )}
       {toast && (
         <div role="status" className="toast">
