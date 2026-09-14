@@ -2,41 +2,78 @@ openapi: 3.1.0
 info:
   title: MiniFlow board API
   version: 0.1.0
-  description: |
-    Proposed FastAPI HTTP contract for the current BoardService in
-    frontent/src/services/boardService.ts. No HTTP client or backend exists yet,
-    so the paths and cookie transport below are design choices, not existing routes.
-    JSON property names match frontent/src/types.ts. Search and filters run in the
-    frontend over a full Board response; they need no separate endpoint.
-
-    There are no accounts, passwords, or roles. Public board reads use the
-    shareable link. Joining records a display name and issues an opaque,
-    HttpOnly, SameSite=Lax browser cookie named miniflow_viewer. The cookie
-    identifies the browser's board memberships and is required for writes.
-    It is a membership credential, not account authentication. All members
-    have equal permissions. A browser may belong to multiple boards; a
-    subsequent join on the same board updates that member's display name.
-    The server must persist boards and memberships across restarts.
-
-    HTTP writes are atomic and use last-write-wins. After a committed board
-    change, notify subscribed clients; clients fetch the board again, including
-    after a WebSocket reconnect. Positions are zero-based and contiguous.
+  description: Implemented FastAPI contract. The backend is mounted at /api and stores all data, credentials, tokens,
+    and WebSocket subscriptions in one process's memory. Restarting it clears everything. The frontend uses a random
+    browser credential and bearer token for protected requests; there is no account-management UI. Public share-link
+    reads require no token. Search, filters, and personal board-list ordering run in the frontend; board-list ordering
+    is saved in that browser, not on this API.
 servers:
   - url: /api
 tags:
+  - name: Auth
   - name: Boards
   - name: Columns
   - name: Tasks
 paths:
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      operationId: register
+      summary: Register a credential
+      description: Used by the frontend to create a random browser credential. The password is stored as a salted
+        PBKDF2-SHA256 hash. Registration requires a password of at least 8 characters. All credentials disappear
+        on backend restart.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '201':
+          description: Credential registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisteredUser'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /auth/token:
+    post:
+      tags:
+        - Auth
+      operationId: token
+      summary: Exchange a credential for an opaque bearer token
+      description: Invalid username or password returns 401. Tokens are kept only in memory and expire when the
+        backend restarts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '200':
+          description: Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /boards:
     get:
-      tags: [Boards]
+      tags:
+        - Boards
       operationId: listBoards
       summary: List boards known to this browser
-      description: |
-        Uses the optional viewer cookie to list boards joined or created by
-        this browser. Without it, returns an empty array. Full Board objects
-        preserve the BoardService return type.
+      description: Lists boards created or joined by the optional bearer identity. Without a valid token, returns
+        an empty array. The frontend separately pins the public Demo Board.
       responses:
         '200':
           description: Boards available to this browser.
@@ -44,36 +81,42 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Board' }
+                items:
+                  $ref: '#/components/schemas/Board'
+      security:
+        - {}
+        - bearerAuth: []
     post:
-      tags: [Boards]
+      tags:
+        - Boards
       operationId: createBoard
       summary: Create a board from a built-in template
-      description: |
-        The new board starts with its template columns, no tasks, and no
-        members. It is associated with this browser for listBoards; the
-        creator still calls joinBoard to become a member before editing.
+      description: Creates a board with template columns and no members or tasks. A valid optional bearer token
+        associates it with that identity for listBoards. The creator joins separately before editing.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreateBoard' }
+            schema:
+              $ref: '#/components/schemas/CreateBoard'
       responses:
         '201':
           description: Created board.
-          headers:
-            Set-Cookie:
-              schema: { type: string }
-              description: Opaque miniflow_viewer cookie associating this browser with the board.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Board' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+              schema:
+                $ref: '#/components/schemas/Board'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      security:
+        - {}
+        - bearerAuth: []
   /boards/by-share/{shareId}:
     parameters:
       - $ref: '#/components/parameters/ShareId'
     get:
-      tags: [Boards]
+      tags:
+        - Boards
       operationId: getBoardByShareId
       summary: Read a board using its shareable ID
       description: Public; the frontend maps 404 to null.
@@ -82,16 +125,20 @@ paths:
           description: Full board state.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Board' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema:
+                $ref: '#/components/schemas/Board'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /boards/{boardId}/viewer:
     parameters:
       - $ref: '#/components/parameters/BoardId'
     get:
-      tags: [Boards]
+      tags:
+        - Boards
       operationId: getViewer
       summary: Find this browser's membership on a board
-      description: No cookie or no membership returns JSON null.
+      description: Returns the member for the optional bearer identity on this board, or JSON null. An unknown board
+        returns 404.
       responses:
         '200':
           description: Current board member or null.
@@ -101,305 +148,408 @@ paths:
                 oneOf:
                   - $ref: '#/components/schemas/Member'
                   - type: 'null'
-        '404': { $ref: '#/components/responses/NotFound' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+      security:
+        - {}
+        - bearerAuth: []
   /boards/{boardId}/members:
     parameters:
       - $ref: '#/components/parameters/BoardId'
     post:
-      tags: [Boards]
+      tags:
+        - Boards
       operationId: joinBoard
       summary: Join a board or update this browser's display name
-      description: |
-        Public; boardId is obtained from the share-link read. Sets or
-        refreshes miniflow_viewer. A returning member keeps the same ID and
-        joinedAt. Joining emits a board-changed notification.
+      description: Requires a bearer token. Creates a membership for this identity on this board, or updates its
+        display name while retaining the same member ID and joinedAt. Emits board.changed.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/JoinBoard' }
+            schema:
+              $ref: '#/components/schemas/JoinBoard'
       responses:
         '200':
-          description: New or updated member; response sets the viewer cookie.
-          headers:
-            Set-Cookie:
-              schema: { type: string }
-              description: Opaque miniflow_viewer cookie; HttpOnly and SameSite=Lax.
+          description: Current board member.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Member' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+              schema:
+                $ref: '#/components/schemas/Member'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      security:
+        - bearerAuth: []
   /boards/{boardId}/columns:
     parameters:
       - $ref: '#/components/parameters/BoardId'
     post:
-      tags: [Columns]
+      tags:
+        - Columns
       operationId: addColumn
       summary: Append a column
-      security: [{ viewerCookie: [] }]
-      description: |
-        Position is the previous column count. A column named Done (case
-        insensitive) becomes isDone only if the board has no Done column.
+      security:
+        - bearerAuth: []
+      description: Position is the previous column count. A column named Done (case insensitive) becomes isDone
+        only if the board has no Done column. Requires bearer token and membership on this board.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ColumnName' }
+            schema:
+              $ref: '#/components/schemas/ColumnName'
       responses:
         '201':
           description: Created column.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/BoardColumn' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+              schema:
+                $ref: '#/components/schemas/BoardColumn'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /boards/{boardId}/columns/{columnId}:
     parameters:
       - $ref: '#/components/parameters/BoardId'
       - $ref: '#/components/parameters/ColumnId'
     patch:
-      tags: [Columns]
+      tags:
+        - Columns
       operationId: renameColumn
       summary: Rename a column
-      security: [{ viewerCookie: [] }]
-      description: |
-        If renamed Done and no Done column exists, mark it isDone and set
-        completedAt on its tasks that lack it. Renaming an existing Done
-        column does not clear its designated isDone flag.
+      security:
+        - bearerAuth: []
+      description: If renamed Done and no Done column exists, mark it isDone and set completedAt on its tasks that
+        lack it. Renaming an existing Done column does not clear its designated isDone flag. Requires bearer token
+        and membership on this board.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ColumnName' }
+            schema:
+              $ref: '#/components/schemas/ColumnName'
       responses:
-        '204': { description: Column renamed; no body. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '204':
+          description: Column renamed; no body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
     delete:
-      tags: [Columns]
+      tags:
+        - Columns
       operationId: deleteColumn
       summary: Delete a column and move its tasks to the first remaining column
-      security: [{ viewerCookie: [] }]
-      description: |
-        Reject deletion of the last column. Append displaced tasks in their
-        prior order; normalize column and task positions. Set or clear each
-        moved task's completedAt according to the destination's isDone flag.
+      security:
+        - bearerAuth: []
+      description: Reject deletion of the last column. Append displaced tasks in their prior order; normalize column
+        and task positions. Set or clear each moved task's completedAt according to the destination's isDone flag.
+        Requires bearer token and membership on this board.
       responses:
-        '204': { description: Column deleted; no body. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '204':
+          description: Column deleted; no body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /boards/{boardId}/columns/{columnId}/position:
     parameters:
       - $ref: '#/components/parameters/BoardId'
       - $ref: '#/components/parameters/ColumnId'
     put:
-      tags: [Columns]
+      tags:
+        - Columns
       operationId: moveColumn
       summary: Move a column in one atomic write
-      security: [{ viewerCookie: [] }]
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/MoveColumn' }
+            schema:
+              $ref: '#/components/schemas/MoveColumn'
       responses:
-        '204': { description: Column moved; no body. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '204':
+          description: Column moved; no body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      description: Requires bearer token and membership on this board.
   /boards/{boardId}/columns/{columnId}/tasks:
     parameters:
       - $ref: '#/components/parameters/BoardId'
       - $ref: '#/components/parameters/ColumnId'
     post:
-      tags: [Tasks]
+      tags:
+        - Tasks
       operationId: addTask
       summary: Append a task to a column
-      security: [{ viewerCookie: [] }]
-      description: completedAt is set if the destination isDone; otherwise null.
+      security:
+        - bearerAuth: []
+      description: completedAt is set if the destination isDone; otherwise null. Requires bearer token and membership
+        on this board.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/TaskFields' }
+            schema:
+              $ref: '#/components/schemas/TaskFields'
       responses:
         '201':
           description: Created task.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Task' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /boards/{boardId}/tasks/{taskId}:
     parameters:
       - $ref: '#/components/parameters/BoardId'
       - $ref: '#/components/parameters/TaskId'
     put:
-      tags: [Tasks]
+      tags:
+        - Tasks
       operationId: updateTask
       summary: Replace a task's editable fields
-      security: [{ viewerCookie: [] }]
-      description: |
-        Replace all TaskFields and update updatedAt. Position, columnId,
-        completedAt, and creation time are controlled by the server.
+      security:
+        - bearerAuth: []
+      description: Replace all TaskFields and update updatedAt. Position, columnId, completedAt, and creation time
+        are controlled by the server. Requires bearer token and membership on this board.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/TaskFields' }
+            schema:
+              $ref: '#/components/schemas/TaskFields'
       responses:
-        '204': { description: Task updated; no body. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '204':
+          description: Task updated; no body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
     delete:
-      tags: [Tasks]
+      tags:
+        - Tasks
       operationId: deleteTask
       summary: Permanently delete a task
-      security: [{ viewerCookie: [] }]
-      description: Normalize positions in the source column after deletion.
+      security:
+        - bearerAuth: []
+      description: Normalize positions in the source column after deletion. Requires bearer token and membership
+        on this board.
       responses:
-        '204': { description: Task deleted; no body. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '204':
+          description: Task deleted; no body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /boards/{boardId}/tasks/{taskId}/position:
     parameters:
       - $ref: '#/components/parameters/BoardId'
       - $ref: '#/components/parameters/TaskId'
     put:
-      tags: [Tasks]
+      tags:
+        - Tasks
       operationId: moveTask
       summary: Move or reorder one task in one atomic write
-      security: [{ viewerCookie: [] }]
-      description: |
-        Remove the task, insert it at toIndex in the destination (clamped
-        to its valid insertion range), and renumber affected columns. Set
-        completedAt on entry to the designated Done column and clear it on
-        exit. Preserve completedAt when reordering inside Done.
+      security:
+        - bearerAuth: []
+      description: Remove the task, insert it at toIndex in the destination (clamped to its valid insertion range),
+        and renumber affected columns. Set completedAt on entry to the designated Done column and clear it on exit.
+        Preserve completedAt when reordering inside Done. Requires bearer token and membership on this board.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/MoveTask' }
+            schema:
+              $ref: '#/components/schemas/MoveTask'
       responses:
-        '204': { description: Task moved; no body. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '204':
+          description: Task moved; no body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /boards/{boardId}/events:
     parameters:
       - $ref: '#/components/parameters/BoardId'
     get:
-      tags: [Boards]
+      tags:
+        - Boards
       operationId: subscribeToBoard
       summary: Upgrade to a board WebSocket
-      description: |
-        Public for holders of a board ID obtained through the share link.
-        This is a WebSocket upgrade, documented with an OpenAPI extension
-        because OpenAPI does not model WebSocket frames natively. The server
-        sends a board.changed frame after each committed board or member
-        mutation. Frames carry no board data; clients call the board read
-        endpoint after each frame and after every reconnect.
+      description: Public WebSocket upgrade for a board ID. After each member, column, or task mutation, the server
+        sends board.changed with no board payload. Clients fetch the board after each frame and after reconnecting;
+        the frontend polls every three seconds while disconnected. Subscriptions work within a single backend process
+        only.
       x-websocket:
         server-message:
           $ref: '#/components/schemas/BoardChangedEvent'
         client-message: null
+        unknown-board-close-code: 4404
       responses:
-        '101': { description: Switching Protocols to WebSocket. }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '101':
+          description: Switching Protocols to WebSocket.
+        '403':
+          description: Unknown board ID; WebSocket upgrade rejected before acceptance.
 components:
   securitySchemes:
-    viewerCookie:
-      type: apiKey
-      in: cookie
-      name: miniflow_viewer
-      description: Opaque anonymous board-membership credential issued on join.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque token returned by POST /auth/token. A board membership is also required for column and
+        task writes.
   parameters:
     BoardId:
       name: boardId
       in: path
       required: true
-      schema: { type: string }
+      schema:
+        type: string
     ShareId:
       name: shareId
       in: path
       required: true
-      schema: { type: string }
+      schema:
+        type: string
     ColumnId:
       name: columnId
       in: path
       required: true
-      schema: { type: string }
+      schema:
+        type: string
     TaskId:
       name: taskId
       in: path
       required: true
-      schema: { type: string }
+      schema:
+        type: string
   responses:
     Unauthorized:
-      description: Missing or invalid viewer cookie, or viewer has not joined this board.
+      description: Missing or invalid bearer token, invalid credentials, or no membership on this board.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+          schema:
+            $ref: '#/components/schemas/ApiError'
     NotFound:
       description: Board, column, or task not found.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+          schema:
+            $ref: '#/components/schemas/ApiError'
     Conflict:
-      description: The requested operation would violate a board invariant.
+      description: Duplicate username or an operation that violates a board invariant.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+          schema:
+            $ref: '#/components/schemas/ApiError'
     ValidationError:
       description: Invalid request body or field value.
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+          schema:
+            $ref: '#/components/schemas/ApiError'
   schemas:
     ApiError:
       type: object
       additionalProperties: false
-      required: [detail]
+      required:
+        - detail
       properties:
-        detail: { type: string }
+        detail:
+          type: string
+      description: FastAPI error responses use a string detail. Request validation returns the first validation
+        message.
     TemplateId:
       type: string
-      enum: [default, software, weekly]
+      enum:
+        - default
+        - software
+        - weekly
     Priority:
       oneOf:
         - type: string
-          enum: [low, medium, high]
+          enum:
+            - low
+            - medium
+            - high
         - type: 'null'
     Member:
       type: object
       additionalProperties: false
-      required: [id, displayName, joinedAt]
+      required:
+        - id
+        - displayName
+        - joinedAt
       properties:
-        id: { type: string }
-        displayName: { type: string, minLength: 1 }
-        joinedAt: { type: string, format: date-time }
+        id:
+          type: string
+        displayName:
+          type: string
+          minLength: 1
+        joinedAt:
+          type: string
+          format: date-time
     BoardColumn:
       type: object
       additionalProperties: false
-      required: [id, name, position, isDone]
+      required:
+        - id
+        - name
+        - position
+        - isDone
       properties:
-        id: { type: string }
-        name: { type: string, minLength: 1 }
-        position: { type: integer, minimum: 0 }
-        isDone: { type: boolean }
+        id:
+          type: string
+        name:
+          type: string
+          minLength: 1
+        position:
+          type: integer
+          minimum: 0
+        isDone:
+          type: boolean
     TaskFields:
       type: object
-      required: [title, description, priority, dueDate, assigneeId]
+      required:
+        - title
+        - description
+        - priority
+        - dueDate
+        - assigneeId
       properties:
-        title: { type: string, minLength: 1 }
-        description: { type: string }
-        priority: { $ref: '#/components/schemas/Priority' }
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        priority:
+          $ref: '#/components/schemas/Priority'
         dueDate:
           oneOf:
             - type: string
@@ -415,74 +565,160 @@ components:
       allOf:
         - $ref: '#/components/schemas/TaskFields'
         - type: object
-          required: [id, columnId, position, completedAt, createdAt, updatedAt]
+          required:
+            - id
+            - columnId
+            - position
+            - completedAt
+            - createdAt
+            - updatedAt
           properties:
-            id: { type: string }
-            columnId: { type: string }
-            position: { type: integer, minimum: 0 }
+            id:
+              type: string
+            columnId:
+              type: string
+            position:
+              type: integer
+              minimum: 0
             completedAt:
               oneOf:
                 - type: string
                   format: date-time
                 - type: 'null'
-            createdAt: { type: string, format: date-time }
-            updatedAt: { type: string, format: date-time }
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
     Board:
       type: object
       additionalProperties: false
-      required: [id, shareId, name, template, createdAt, columns, tasks, members]
+      required:
+        - id
+        - shareId
+        - name
+        - template
+        - createdAt
+        - columns
+        - tasks
+        - members
       properties:
-        id: { type: string }
-        shareId: { type: string }
-        name: { type: string, minLength: 1 }
-        template: { $ref: '#/components/schemas/TemplateId' }
-        createdAt: { type: string, format: date-time }
+        id:
+          type: string
+        shareId:
+          type: string
+        name:
+          type: string
+          minLength: 1
+        template:
+          $ref: '#/components/schemas/TemplateId'
+        createdAt:
+          type: string
+          format: date-time
         columns:
           type: array
-          items: { $ref: '#/components/schemas/BoardColumn' }
+          items:
+            $ref: '#/components/schemas/BoardColumn'
         tasks:
           type: array
-          items: { $ref: '#/components/schemas/Task' }
+          items:
+            $ref: '#/components/schemas/Task'
         members:
           type: array
-          items: { $ref: '#/components/schemas/Member' }
+          items:
+            $ref: '#/components/schemas/Member'
+      description: Full board snapshot. The backend includes the public seeded Demo Board at shareId demo.
     CreateBoard:
       type: object
       additionalProperties: false
-      required: [name, template]
+      required:
+        - name
+        - template
       properties:
-        name: { type: string, minLength: 1 }
-        template: { $ref: '#/components/schemas/TemplateId' }
+        name:
+          type: string
+          minLength: 1
+        template:
+          $ref: '#/components/schemas/TemplateId'
     JoinBoard:
       type: object
       additionalProperties: false
-      required: [displayName]
+      required:
+        - displayName
       properties:
-        displayName: { type: string, minLength: 1 }
+        displayName:
+          type: string
+          minLength: 1
     ColumnName:
       type: object
       additionalProperties: false
-      required: [name]
+      required:
+        - name
       properties:
-        name: { type: string, minLength: 1 }
+        name:
+          type: string
+          minLength: 1
     MoveColumn:
       type: object
       additionalProperties: false
-      required: [toIndex]
+      required:
+        - toIndex
       properties:
-        toIndex: { type: integer, minimum: 0 }
+        toIndex:
+          type: integer
+          minimum: 0
     MoveTask:
       type: object
       additionalProperties: false
-      required: [toColumnId, toIndex]
+      required:
+        - toColumnId
+        - toIndex
       properties:
-        toColumnId: { type: string }
-        toIndex: { type: integer, minimum: 0 }
+        toColumnId:
+          type: string
+        toIndex:
+          type: integer
+          minimum: 0
     BoardChangedEvent:
       type: object
       additionalProperties: false
-      required: [type]
+      required:
+        - type
       properties:
         type:
           type: string
           const: board.changed
+    Credentials:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+          description: Registration requires at least 8 characters; token requests accept a string of at least 1
+            character.
+    RegisteredUser:
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          type: string
+    TokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          const: bearer

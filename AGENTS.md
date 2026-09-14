@@ -1,44 +1,17 @@
 # MiniFlow agent guide
 
-## Product and scope
+Read `_docs/specs.md` before changing product behavior. It describes the implemented desktop-first Kanban app. Keep work focused on boards, columns, tasks, assignment, ordering, search, filters, templates, sharing, and board updates. Do not silently rename the intentional `frontent/` directory.
 
-- Read `_docs/specs.md` before changing product behavior. It defines the desktop-first, multi-user Kanban MVP and the chosen technology stack.
-- Keep the MVP focused on boards, customizable columns, tasks, assignment, drag-and-drop ordering, search, filters, templates, and real-time board updates. Accounts, roles, comments, notifications, analytics, and mobile-specific interaction are outside the MVP.
-- People join a board with a display name and shareable link. Board members have equal permissions. A task is complete in the designated Done column; moving it out clears `completedAt`.
+## Current architecture
 
-## Repository layout
+- `frontent/src/services/boardService.ts` is the UI data-access contract. `services/index.ts` selects `ApiBoardService`; UI components must use the service layer rather than call HTTP or browser storage directly. `MockBoardService` is retained for isolated tests.
+- `apiBoardService.ts` uses `/api` HTTP endpoints and board WebSockets. Vite proxies `/api` to the local FastAPI server. On a failed WebSocket, the client polls every three seconds and retries. `boardOrder.ts` stores each browser's board-list order and A–Z/Z–A mode locally.
+- `backend/app/` contains routers, Pydantic request models, authentication, and an in-memory store. There is no database, SQLAlchemy layer, or Alembic migration yet. Run a single backend process; restarts erase boards, members, credentials, and tokens.
+- The browser obtains a bearer token using an automatically generated credential. Share-link reads are public. Joining requires a token; editing requires token plus membership. Display names and memberships are per board, and all members have equal permissions. The UI has no account-management screen.
+- Tasks and columns have contiguous zero-based positions. A task's `completedAt` is set in the designated Done column and cleared when it leaves. Treat a drag as one saved update and reload board state after WebSocket reconnects.
 
-- `frontent/` is the intentional directory name for the React/TypeScript/Vite app. Do not silently rename it.
-- `frontent/src/services/boardService.ts` defines the data-access contract. `mockBoardService.ts` implements it with `localStorage`, and `services/index.ts` selects the implementation. Keep all board data access behind this service layer; UI components should not call a backend or read/write storage directly.
-- The mock supports persistence and updates across tabs in one browser profile. It cannot share data across devices. Keep that limitation clear until the FastAPI backend exists.
-- No backend has been implemented yet. The planned backend is Python/FastAPI with SQLAlchemy, Alembic, and SQLite; normal writes use HTTP and board updates use WebSockets.
+## Checks and commands
 
-## Working on the frontend
+From the repository root, use `make install`, `make run`, and `make test` for the backend. Use `uv` for Python dependency changes. From `frontent/`, use `npm ci`, `npm run dev`, `npm test`, and `npm run build`. Add meaningful tests when changing user behavior or service invariants. Keep generated files such as `node_modules/`, `dist/`, `.venv/`, and caches out of commits.
 
-From `frontent/`:
-
-```bash
-npm ci
-npm run dev
-npm test
-npm run build
-```
-
-- Add tests for meaningful user behavior and service invariants when changing them. Existing tests use Vitest and React Testing Library.
-- Keep task and column positions consistent after moves or deletion. Treat a drag operation as one saved update; refresh board state after reconnecting to a future backend.
-- Preserve the existing component styles and desktop-first layout unless the task calls for a redesign.
-- Do not commit `node_modules/`, `dist/`, or other generated files.
-
-## Working on the future backend
-
-Use `uv` for Python dependency management when the backend is added. Useful commands:
-
-```bash
-uv sync
-uv add <PACKAGE-NAME>
-uv run python <PYTHON-FILE>
-```
-
-Keep database access through SQLAlchemy and schema changes in Alembic migrations. SQLite is the initial persistent database; test database-specific behavior before any later move to PostgreSQL.
-
-Make small, coherent Git commits regularly. Include tests and documentation updates with the behavior they describe.
+Keep `_docs/specs.md`, `openapi.yaml`, and READMEs consistent with behavior. Make small, coherent commits regularly with related tests and documentation. Do not claim persistence, cross-device identity, or real-time delivery across multiple backend workers until those features exist.
