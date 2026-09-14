@@ -1,6 +1,6 @@
 # MiniFlow: current product and implementation
 
-MiniFlow is a desktop-first Kanban app for personal work and small teams. This document describes the behavior implemented in this repository as of 2026-09-14. It is not a persistence or deployment specification.
+MiniFlow is a desktop-first Kanban app for personal work and small teams. This document separates the behavior implemented as of 2026-09-14 from the next planned persistence step.
 
 ## User experience
 
@@ -32,6 +32,14 @@ Public reads use a board's share ID. Board creation is public, but associating i
 - Start the backend from the repository root with `make install` and `make run`. In another terminal, run `cd frontent && npm ci && npm run dev`. Vite proxies `/api` and board WebSockets to `http://127.0.0.1:8000`.
 - Run `make test` for backend tests; run `npm test` and `npm run build` from `frontent/` for frontend checks.
 
+## Planned next step: SQLite persistence
+
+SQLite is the chosen initial persistent database for the FastAPI backend. Replace the in-memory board and membership store with durable storage so boards, columns, tasks, memberships, assignments, and their ordering survive a backend restart. Preserve or recover the browser identity across restarts so returning members retain their memberships. Keep normal reads and writes behind SQLAlchemy, manage schema changes with Alembic migrations, and use `uv` for Python dependencies. Test migration and SQLite-specific behavior before relying on it; a later PostgreSQL move would need its own query and migration tests.
+
+The API should continue using HTTP for reads and writes and WebSockets for board-change notifications. After a database write commits, notify viewers of the changed board; clients still reload the board after WebSocket reconnects. SQLite persistence by itself does not broadcast between backend processes, so keep one backend worker until a shared notification mechanism exists. The current browser-local ordering of the **Your boards** list remains a personal UI preference unless a separate server-side preference is deliberately added.
+
+This is planned work. The current backend still uses the in-memory store described above and loses its data on restart.
+
 ## Current limits
 
-The data is ephemeral, one backend process is supported, share links grant public read access, and bearer tokens live in browser storage. The app has no persistent database, user-managed accounts, email invitations, roles, comments, notifications, analytics, or touch-specific workflow. Database persistence and stronger identity/deployment controls are future work, not current behavior.
+The data is ephemeral, one backend process is supported, share links grant public read access, and bearer tokens live in browser storage. The app has no persistent database, user-managed accounts, email invitations, roles, comments, notifications, analytics, or touch-specific workflow. SQLite persistence is the next planned backend step; stronger identity and deployment controls remain future work.
