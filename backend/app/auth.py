@@ -18,7 +18,7 @@ def verify_password(password: str, stored: str) -> bool:
 def user_from_header(request: Request, authorization: str | None) -> str | None:
     if not authorization or not authorization.startswith('Bearer '):
         return None
-    return request.app.state.store.tokens.get(authorization[7:])
+    return request.app.state.store.token_user(authorization[7:])
 
 
 async def require_user(request: Request, authorization: str | None = Header(default=None)) -> str:

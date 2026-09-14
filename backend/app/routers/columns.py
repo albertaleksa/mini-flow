@@ -18,6 +18,7 @@ async def add_column(boardId: str, body: ColumnName, request: Request, user: str
     store, board = access(request, boardId, user)
     col = {'id': uid(), 'name': body.name, 'position': len(board['columns']), 'isDone': body.name.lower() == 'done' and not any(c['isDone'] for c in board['columns'])}
     board['columns'].append(col)
+    store.save_board(board)
     store.emit(boardId)
     return col
 
@@ -32,6 +33,7 @@ async def rename_column(boardId: str, columnId: str, body: ColumnName, request: 
         for task in board['tasks']:
             if task['columnId'] == columnId and not task['completedAt']:
                 task['completedAt'] = now()
+    store.save_board(board)
     store.emit(boardId)
 
 
@@ -50,6 +52,7 @@ async def delete_column(boardId: str, columnId: str, request: Request, user: str
         task['completedAt'] = now() if destination['isDone'] else None
         task['updatedAt'] = now()
     store.normalize(board)
+    store.save_board(board)
     store.emit(boardId)
 
 
@@ -60,4 +63,5 @@ async def move_column(boardId: str, columnId: str, body: MoveColumn, request: Re
     board['columns'].remove(col)
     board['columns'].insert(min(body.toIndex, len(board['columns'])), col)
     store.normalize(board)
+    store.save_board(board)
     store.emit(boardId)

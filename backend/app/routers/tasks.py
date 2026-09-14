@@ -19,6 +19,7 @@ async def add_task(boardId: str, columnId: str, body: TaskFields, request: Reque
     store, board = access(request, boardId, user)
     store.item(board, 'columns', columnId)
     task = store.add_task(board, columnId, fields_for_board(store, board, body))
+    store.save_board(board)
     store.emit(boardId)
     return task
 
@@ -29,6 +30,7 @@ async def update_task(boardId: str, taskId: str, body: TaskFields, request: Requ
     task = store.item(board, 'tasks', taskId)
     task.update(fields_for_board(store, board, body))
     task['updatedAt'] = now()
+    store.save_board(board)
     store.emit(boardId)
 
 
@@ -37,6 +39,7 @@ async def delete_task(boardId: str, taskId: str, request: Request, user: str = D
     store, board = access(request, boardId, user)
     board['tasks'].remove(store.item(board, 'tasks', taskId))
     store.normalize(board)
+    store.save_board(board)
     store.emit(boardId)
 
 
@@ -59,4 +62,5 @@ async def move_task(boardId: str, taskId: str, body: MoveTask, request: Request,
     task['updatedAt'] = now()
     board['tasks'].insert(insert_at, task)
     store.normalize(board)
+    store.save_board(board)
     store.emit(boardId)

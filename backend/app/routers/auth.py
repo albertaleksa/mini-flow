@@ -11,18 +11,16 @@ async def register(body: Credentials, request: Request):
     store = request.app.state.store
     if len(body.password) < 8:
         raise HTTPException(422, 'Password must have at least 8 characters')
-    if body.username in store.users:
-        raise HTTPException(409, 'Username already exists')
-    store.users[body.username] = hash_password(body.password)
+    store.register(body.username, hash_password(body.password))
     return {'username': body.username}
 
 
 @router.post('/token')
 async def token(body: Credentials, request: Request):
     store = request.app.state.store
-    stored = store.users.get(body.username)
+    stored = store.password_hash(body.username)
     if not stored or not verify_password(body.password, stored):
         raise HTTPException(401, 'Invalid credentials')
     value = secrets.token_urlsafe(32)
-    store.tokens[value] = body.username
+    store.add_token(value, body.username)
     return {'access_token': value, 'token_type': 'bearer'}

@@ -2,8 +2,8 @@ openapi: 3.1.0
 info:
   title: MiniFlow board API
   version: 0.1.0
-  description: Implemented FastAPI contract. The backend is mounted at /api and stores all data, credentials, tokens,
-    and WebSocket subscriptions in one process's memory. Restarting it clears everything. The frontend uses a random
+  description: Implemented FastAPI contract. The backend is mounted at /api and stores boards, credentials, and tokens
+    in a SQLAlchemy database (SQLite by default). WebSocket subscriptions remain in process memory. The frontend uses a random
     browser credential and bearer token for protected requests; there is no account-management UI. Public share-link
     reads require no token. Search, filters, and personal board-list ordering run in the frontend; board-list ordering
     is saved in that browser, not on this API.
@@ -22,8 +22,7 @@ paths:
       operationId: register
       summary: Register a credential
       description: Used by the frontend to create a random browser credential. The password is stored as a salted
-        PBKDF2-SHA256 hash. Registration requires a password of at least 8 characters. All credentials disappear
-        on backend restart.
+        PBKDF2-SHA256 hash. Registration requires a password of at least 8 characters. Credentials persist in the database.
       requestBody:
         required: true
         content:
@@ -47,8 +46,7 @@ paths:
         - Auth
       operationId: token
       summary: Exchange a credential for an opaque bearer token
-      description: Invalid username or password returns 401. Tokens are kept only in memory and expire when the
-        backend restarts.
+      description: Invalid username or password returns 401. Tokens persist in the database across backend restarts.
       requestBody:
         required: true
         content:
